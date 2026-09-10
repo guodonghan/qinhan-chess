@@ -1,0 +1,9 @@
+{
+  "name": "qinhan-chess",
+  "version": "1.0.0",
+  "description": "秦汉象棋杀 - 多模式对战",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
