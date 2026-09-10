@@ -13,7 +13,9 @@ body{font-family:'Noto Serif SC','Songti SC','SimSun','Microsoft YaHei',serif;ba
 .view{display:none;width:100vw;height:100vh;position:absolute;top:0;left:0}
 .view.active{display:flex}
 /* ====== Splash ====== */
-#viewSplash{justify-content:center;align-items:center;flex-direction:column;cursor:pointer;background:radial-gradient(ellipse at 50% 60%,rgba(201,169,78,0.08) 0%,transparent 60%),radial-gradient(ellipse at 30% 30%,rgba(192,57,43,0.06) 0%,transparent 40%)}
+#viewSplash{justify-content:center;align-items:center;flex-direction:column;cursor:pointer;background:url(assets/splash-bg.jpg) center/cover no-repeat;position:relative}
+#viewSplash::after{content:'';position:absolute;inset:0;background:rgba(0,0,0,0.45);pointer-events:none}
+#viewSplash>*{position:relative;z-index:1}
 .splash-title{font-family:'Ma Shan Zheng','STKaiti','KaiTi',cursive;font-size:64px;color:var(--gold);text-shadow:0 4px 30px rgba(201,169,78,0.3);letter-spacing:12px;margin-bottom:8px}
 .splash-subtitle{font-size:16px;color:rgba(245,239,230,0.5);letter-spacing:6px;margin-bottom:60px}
 .splash-hint{font-size:13px;color:rgba(245,239,230,0.3);animation:pulse 2s ease-in-out infinite}
@@ -44,6 +46,7 @@ body{font-family:'Noto Serif SC','Songti SC','SimSun','Microsoft YaHei',serif;ba
 canvas#board{display:block;cursor:pointer;border-radius:4px}
 .game-sidebar{width:200px;display:flex;flex-direction:column;gap:12px}
 .game-mode-label{text-align:center;font-size:13px;color:var(--gold);letter-spacing:2px;padding:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px}
+.mode-rules-desc{font-size:12px;color:rgba(255,255,255,0.65);line-height:1.7;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;display:none;text-align:left;letter-spacing:0.5px}
 .game-actions{display:flex;flex-direction:column;gap:8px}
 .action-btn{padding:12px;font-size:13px;font-family:inherit;border:1px solid;border-radius:6px;cursor:pointer;transition:all 0.2s;letter-spacing:1px;background:rgba(255,255,255,0.05)}
 .btn-restart{border-color:rgba(192,57,43,0.3);color:#e74c3c}
@@ -105,7 +108,7 @@ canvas#board{display:block;cursor:pointer;border-radius:4px}
 <!-- ====== Splash 视图 ====== -->
 <div id="viewSplash" class="view active" onclick="navigateView('menu')">
   <div class="splash-content" style="text-align:center">
-    <div class="splash-title">中 国 象 棋</div>
+    <div class="splash-title">秦 汉 象 棋 杀</div>
     <div class="splash-subtitle">— 多 模 式 对 战 —</div>
     <div class="splash-hint">点击任意位置开始</div>
   </div>
@@ -114,7 +117,7 @@ canvas#board{display:block;cursor:pointer;border-radius:4px}
 <!-- ====== 首页菜单 ====== -->
 <div id="viewMenu" class="view">
   <div class="menu-container">
-    <div class="menu-header"><h1>🏯 中 国 象 棋</h1><p>主 菜 单</p></div>
+    <div class="menu-header"><h1>🏯 秦 汉 象 棋 杀</h1><p>主 菜 单</p></div>
     <div class="mode-grid" id="modeGrid">
       <button class="mode-card" data-mode="classic">普通局<div class="mode-desc">标准象棋对弈</div></button>
       <button class="mode-card" data-mode="ban">ban局<div class="mode-desc">各禁己方一子</div></button>
@@ -135,7 +138,8 @@ canvas#board{display:block;cursor:pointer;border-radius:4px}
   <div class="game-main">
     <div class="board-wrapper"><canvas id="board"></canvas></div>
     <div class="game-sidebar">
-      <div class="game-mode-label" id="gameModeLabel">普通局</div>
+      <div class="game-mode-label" id="gameModeLabel">普通局 <span id="modeInfoBtn" style="cursor:pointer;margin-left:6px;font-size:14px;opacity:0.6">ℹ️</span></div>
+      <div class="mode-rules-desc" id="modeRulesDesc"></div>
       <div class="game-actions">
         <button class="action-btn btn-undo" id="btnUndo">⟲ 悔棋</button>
         <button class="action-btn btn-restart" id="btnRestart">↻ 新开局</button>
@@ -194,14 +198,14 @@ canvas#board{display:block;cursor:pointer;border-radius:4px}
 
 <script>
 // ============================================================
-// 中国象棋 - 多模式（策略模式）v1.2
+// 秦汉象棋杀 - 多模式（策略模式）v1.2
 // ============================================================
 const COLS=9,ROWS=10,CELL=56,PADDING=32,PIECE_R=23;
 const BOARD_W=CELL*(COLS-1)+PADDING*2,BOARD_H=CELL*(ROWS-1)+PADDING*2;
 const SIDE_RED=0,SIDE_BLACK=1;
 const KING=0,ADVISOR=1,ELEPHANT=2,HORSE=3,ROOK=4,CANNON=5,PAWN=6;
-const PIECE_NAMES={red:['帅','仕','相','馬','車','炮','兵'],black:['将','士','象','马','车','炮','卒']};
-const PIECE_TYPES=['帅/将','仕/士','相/象','馬/马','車/车','炮','兵/卒'];
+const PIECE_NAMES={red:['帅','仕','相','马','车','炮','兵'],black:['将','士','象','馬','車','砲','卒']};
+const PIECE_TYPES=['帅/将','仕/士','相/象','马/馬','车/車','炮/砲','兵/卒'];
 const AI_DEPTH=[1,2,3,4,5];
 const PIECE_VALUE=[10000,20,20,40,100,45,10];
 
@@ -365,6 +369,7 @@ const MODES={};
 // ----- 经典模式 -----
 MODES.classic={
   name:'普通局',
+  desc:'标准中国象棋对弈，红先黑后，将帅被吃即判负。',
   init(board,game){game.phase='play';},
   canMove(board,game,fr,fc,tr,tc,captured){return true;},
   onMove(board,game,fr,fc,tr,tc,captured){},
@@ -379,6 +384,7 @@ MODES.classic={
 // ----- ban局（AI 模拟推演）-----
 MODES.ban={
   name:'ban局',
+  desc:'开局前双方各禁掉己方一枚棋子（将/帅除外）。禁子策略影响全局，考验取舍。AI 会模拟推演选择最有利的禁子方案。',
   init(board,game){
     game.phase='ban';game.banRed=null;game.banBlack=null;game.banSide=SIDE_RED;
     updateStatus('请选择要禁掉的己方棋子',SIDE_RED);
@@ -424,6 +430,7 @@ MODES.ban={
 // ----- ban进阶局（禁对方一子 + 选新将）-----
 MODES.banpro={
   name:'ban进阶局',
+  desc:'双方各禁对方一枚棋子；若禁掉对方将/帅，需为该方选一枚新将（优先选兵）。新将带👑标记，被吃则判负。',
   init(board,game){
     game.phase='banproPick';game.bpRedBan=null;game.bpBlackBan=null;game.bpRedLord=null;game.bpBlackLord=null;
     game.bpPhase='redBan';game.bpNewLordMode=false;
@@ -571,6 +578,7 @@ function finishBanPro(board,game){
 // ----- 心腹局（拦截吃将）-----
 MODES.heart={
   name:'心腹局',
+  desc:'开局各选一枚"心腹"棋子（❤️标记）。心腹存活时，对方将帅不会被吃——必须先消灭心腹，才能攻击将帅。心腹被消灭会触发提示。',
   init(board,game){
     game.phase='chooseHeart';game.heartRed=null;game.heartBlack=null;
     updateStatus('请选择心腹棋子',SIDE_RED);
@@ -648,6 +656,7 @@ MODES.heart={
 // ----- 内臣局（AI优化）-----
 MODES.inner={
   name:'内臣局',
+  desc:'开局各选一枚"内臣"棋子，对内臣身份保密（对方不可见）。将帅被吃时内臣自动继位（👑标记），对局继续。需同时吃掉将帅和新将才能获胜。',
   init(board,game){
     game.phase='chooseInner';game.innerRed=null;game.innerBlack=null;game.innerRevealed=false;
     updateStatus('请选择内臣棋子',SIDE_RED);
@@ -743,9 +752,16 @@ class Renderer{
     for(let c=0;c<9;c++){ctx.beginPath();ctx.moveTo(PADDING+c*CELL,PADDING);ctx.lineTo(PADDING+c*CELL,PADDING+4*CELL);ctx.stroke();ctx.beginPath();ctx.moveTo(PADDING+c*CELL,PADDING+5*CELL);ctx.lineTo(PADDING+c*CELL,PADDING+9*CELL);ctx.stroke();}
     ctx.fillStyle='#5a3a1a';ctx.font='18px "Ma Shan Zheng","STKaiti","KaiTi",cursive';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText('楚  河',PADDING+2*CELL,PADDING+4.5*CELL);ctx.fillText('漢  界',PADDING+6*CELL,PADDING+4.5*CELL);
-    for(const[r,c]of[[0,3],[0,5],[7,3],[7,5]]){ctx.beginPath();ctx.moveTo(PADDING+c*CELL,PADDING+r*CELL);ctx.lineTo(PADDING+(c+2)*CELL,PADDING+(r+2)*CELL);ctx.stroke();ctx.beginPath();ctx.moveTo(PADDING+(c+2)*CELL,PADDING+r*CELL);ctx.lineTo(PADDING+c*CELL,PADDING+(r+2)*CELL);ctx.stroke();}
+    for(const[r,c]of[[0,3],[7,3]]){ctx.beginPath();ctx.moveTo(PADDING+c*CELL,PADDING+r*CELL);ctx.lineTo(PADDING+(c+2)*CELL,PADDING+(r+2)*CELL);ctx.stroke();ctx.beginPath();ctx.moveTo(PADDING+(c+2)*CELL,PADDING+r*CELL);ctx.lineTo(PADDING+c*CELL,PADDING+(r+2)*CELL);ctx.stroke();}
     [[1,1],[1,7],[2,0],[2,2],[2,4],[2,6],[2,8],[7,0],[7,2],[7,4],[7,6],[7,8],[8,1],[8,7]].forEach(([r,c])=>{if(r<=4||r>=5)this.star(r,c);});
-    if(game.lastMove){const f=boardToPixel(game.lastMove.fromRow,game.lastMove.fromCol),t=boardToPixel(game.lastMove.toRow,game.lastMove.toCol);ctx.fillStyle='rgba(255,255,0,0.25)';ctx.fillRect(f.x-CELL/2,f.y-CELL/2,CELL,CELL);ctx.fillRect(t.x-CELL/2,t.y-CELL/2,CELL,CELL);}
+    if(game.lastMove){
+      const f=boardToPixel(game.lastMove.fromRow,game.lastMove.fromCol),t=boardToPixel(game.lastMove.toRow,game.lastMove.toCol);
+      // 起点半透明标记
+      ctx.fillStyle='rgba(255,255,0,0.15)';ctx.fillRect(f.x-CELL/2,f.y-CELL/2,CELL,CELL);
+      // 终点醒目标记（走到的棋子）
+      ctx.fillStyle='rgba(255,255,0,0.3)';ctx.fillRect(t.x-CELL/2,t.y-CELL/2,CELL,CELL);
+      ctx.strokeStyle='rgba(255,215,0,0.6)';ctx.lineWidth=2.5;ctx.strokeRect(t.x-CELL/2+2,t.y-CELL/2+2,CELL-4,CELL-4);
+    }
     const mode=MODES[game.currentMode];
     if(mode&&mode.render)mode.render(ctx,this.board,game);
     if(game.selected!==null){const p=boardToPixel(game.selected.row,game.selected.col);ctx.strokeStyle='rgba(255,255,0,0.6)';ctx.lineWidth=2.5;ctx.strokeRect(p.x-CELL/2+2,p.y-CELL/2+2,CELL-4,CELL-4);}
@@ -941,6 +957,9 @@ document.getElementById('modeGrid').addEventListener('click',e=>{
   const mode=card.dataset.mode;
   if(mode==='settings'){navigateView('settings');return;}
   game.currentMode=mode;
+  document.getElementById('gameModeLabel').innerHTML=(MODES[mode].name||'普通局')+' <span id="modeInfoBtn" style="cursor:pointer;margin-left:6px;font-size:14px;opacity:0.6">ℹ️</span>';
+  document.getElementById('modeInfoBtn')?.addEventListener('click',showModeRules);
+  document.getElementById('modeRulesDesc').style.display='none';
   navigateView('game');
   setTimeout(()=>{restartGame();resizeGame();},50);
 });
@@ -998,6 +1017,17 @@ window.addEventListener('resize',()=>{
 
 // 初始化
 loadSettings();
+
+// ℹ️ 按钮：切换显示玩法说明
+function showModeRules(){
+  const el=document.getElementById('modeRulesDesc');
+  if(el.style.display==='block'){el.style.display='none';return;}
+  const mode=game.currentMode||'classic';
+  const m=MODES[mode];
+  el.textContent=m&&m.desc?m.desc:'暂无说明';
+  el.style.display='block';
+}
+document.getElementById('modeInfoBtn').addEventListener('click',showModeRules);
 </script>
 </body>
 </html>
