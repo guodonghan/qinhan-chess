@@ -7,7 +7,17 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const CHROME = 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME_CANDIDATES = [
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+];
+const CHROME = CHROME_CANDIDATES.find(p => fs.existsSync(p));
+if (!CHROME) {
+  console.error('未找到 Chrome 或 Edge。请安装 Chrome 后重试。');
+  process.exit(1);
+}
 const PORT = 9335;
 const PAGE_URL = 'http://localhost:8765/index.html';
 const PROFILE = path.join(__dirname, '_chrome_profile_e2e');

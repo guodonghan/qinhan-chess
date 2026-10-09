@@ -202,6 +202,13 @@ canvas#board{display:block;cursor:pointer;border-radius:4px}
 <!-- ====== Toast 容器 ====== -->
 <div id="toastContainer"></div>
 
+<!-- ====== AI 模块（外部脚本，按依赖顺序加载） ====== -->
+<script src="js/ai-tactics.js"></script>
+<script src="js/ai-search.js"></script>
+<script src="js/ai-opening.js"></script>
+<script src="js/ai-tt.js"></script>
+<script src="js/ai-evaluate.js"></script>
+
 <script>
 // ============================================================
 // 秦汉象棋杀 - 多模式（策略模式）v1.2
@@ -375,12 +382,43 @@ class ChessAI{
     });
   }
   search(tl){
-    this.timeLimit=tl;this.startTime=Date.now();const side=this.board.turn;let best=null,bs=-Infinity;
+    this.timeLimit=tl;this.startTime=Date.now();const side=this.board.turn;
+    // ★ 开局面数据库：命中则直接返回开局着法（不搜索）
+    if(typeof globalThis!=='undefined' && globalThis.Opening){
+      const op=globalThis.Opening.lookup(this.board);
+      if(op&&op.move){
+        const c=this.board.clone();c.move(op.move.fr,op.move.fc,op.move.tr,op.move.tc);
+        if(!c.isCheckmate()){
+          if(typeof showToast==='function') showToast('📖 开局库：'+(op.name||'定式'),'info');
+          if(typeof console!=='undefined') console.log('[AI-Opening] hit: '+(op.name||'定式')+' move='+JSON.stringify(op.move));
+          return {fr:op.move.fr,fc:op.move.fc,tr:op.move.tr,tc:op.move.tc};
+        }
+      }
+    }
+    // ★ 迭代加深（结合置换表 + 杀手走法 + 历史启发）
+    if(typeof globalThis!=='undefined' && globalThis.Search && globalThis.Search.iterativeDeepening){
+      if(globalThis.Search.resetHeuristics) globalThis.Search.resetHeuristics();
+      const ctx={startTime:this.startTime,timeLimit:this.timeLimit};
+      const r=globalThis.Search.iterativeDeepening(this.board,this.maxDepth,ctx);
+      if(r && r.move){
+        if(typeof console!=='undefined') console.log('[AI-Search] depth='+r.depth+' score='+r.score+' move='+JSON.stringify(r.move));
+        return {fr:r.move.fr,fc:r.move.fc,tr:r.move.tr,tc:r.move.tc};
+      }
+    }
+    // fallback: 原搜索逻辑
+    let best=null,bs=-Infinity;
     let moves=this.getMoves(this.board,side);this.sortMoves(this.board,moves);
     for(const m of moves){if(Date.now()-this.startTime>this.timeLimit)break;const c=this.board.clone();c.move(m.fr,m.fc,m.tr,m.tc);if(c.isCheckmate()){best=m;bs=1e5;break;}const s=-this.ab(c,this.maxDepth-1,-Infinity,-bs,1-side);if(s>bs){bs=s;best=m;}}return best;
   }
   ab(b,d,alpha,beta,side){
-    if(Date.now()-this.startTime>this.timeLimit)return b.evaluate();if(d===0)return b.evaluate();
+    // delegate to Search.ab（带 TT + 杀手/历史）
+    if(typeof globalThis!=='undefined' && globalThis.Search && globalThis.Search.ab){
+      const ctx={startTime:this.startTime||Date.now(),timeLimit:this.timeLimit||1e9};
+      return globalThis.Search.ab(b,d,alpha,beta,side,ctx);
+    }
+    // fallback: 原 ab（无增强）
+    if(Date.now()-this.startTime>this.timeLimit)return b.evaluate();
+    if(d===0)return b.evaluate();
     let moves=this.getMoves(b,side);if(moves.length===0)return side===SIDE_RED?-99999:99999;
     this.sortMoves(b,moves);
     for(const m of moves){const c=b.clone();c.move(m.fr,m.fc,m.tr,m.tc);const s=-this.ab(c,d-1,-beta,-alpha,1-side);if(s>alpha)alpha=s;if(alpha>=beta)break;}return alpha;
@@ -1058,6 +1096,21 @@ function showModeRules(){
   el.style.display='block';
 }
 document.getElementById('modeInfoBtn').addEventListener('click',showModeRules);
+
+// ============================================================
+// AI 模块挂载（加载完后注入战术评估 + 构建开局库）
+// ============================================================
+if(typeof Search!=='undefined'&&Search.install){Search.install();}
+if(typeof Opening!=='undefined'&&Opening.install){Opening.install();}
+if(typeof TT!=='undefined'&&TT.init){TT.init();}
+if(typeof EvalEnhancer!=='undefined'&&EvalEnhancer.install){EvalEnhancer.install();}
+if(typeof console!=='undefined'){
+  console.log('[AI] 战术评分已注入 (Tactics)');
+  console.log('[AI] 静态搜索已就绪 (Search.quiescence)');
+  console.log('[AI] 开局面数据库就绪 (Opening.lookup)');
+  console.log('[AI] 置换表已就绪 (TT, size='+(typeof TT!=='undefined'?TT.size():'-')+')');
+  console.log('[AI] 评估函数增强已注入 (EvalEnhancer)');
+}
 </script>
 </body>
 </html>
