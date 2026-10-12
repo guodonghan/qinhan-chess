@@ -208,6 +208,7 @@ canvas#board{display:block;cursor:pointer;border-radius:4px}
 <script src="js/ai-opening.js"></script>
 <script src="js/ai-tt.js"></script>
 <script src="js/ai-evaluate.js"></script>
+<script src="js/ai-engine.js"></script>
 
 <script>
 // ============================================================
@@ -316,7 +317,14 @@ class ChessBoard {
     return moves;
   }
   getLegalMoves(row,col){return this.getRawMoves(row,col).filter(m=>!this.wouldBeInCheck(row,col,m.row,m.col));}
-  wouldBeInCheck(fr,fc,tr,tc){const c=this.clone();c.board[tr][tc]=c.board[fr][fc];c.board[fr][fc]=null;return c.inCheck(this.turn);}
+  // 原地 make/unmake 判定，避免每一步都 clone 整盘（旧写法每生成一个着法要 deep-copy 一次棋盘）
+  wouldBeInCheck(fr,fc,tr,tc){
+    const b=this.board,captured=b[tr][tc];
+    b[tr][tc]=b[fr][fc];b[fr][fc]=null;
+    const bad=this.inCheck(this.turn);
+    b[fr][fc]=b[tr][tc];b[tr][tc]=captured;
+    return bad;
+  }
   move(fr,fc,tr,tc){
     const captured=this.board[tr][tc];
     this.moveHistory.push({fromRow:fr,fromCol:fc,toRow:tr,toCol:tc,piece:{...this.board[fr][fc]},captured:captured?{...captured}:null});
@@ -990,13 +998,54 @@ function onBoardClick(row,col){
       board.aiThinking=true;updateStatus('思考中...',SIDE_BLACK);showThinkingToast();
       const myEpoch=game.epoch;
       setTimeout(()=>{if(myEpoch!==game.epoch){board.aiThinking=false;hideThinkingToast();return;}
-        const depth=AI_DEPTH[parseInt(document.getElementById('difficulty').value)];const tt=parseInt(document.getElementById('thinkTime').value)*1000;const ai=new ChessAI(board,depth);const move=ai.search(tt*0.8);if(move){const cap2=board.move(move.fr,move.fc,move.tr,move.tc);renderer.draw();if(cap2)audio.capture();else audio.place();updateStatus('红方走棋',SIDE_RED);if(board.inCheck(SIDE_RED))audio.check();if(mode&&mode.isCheckmate(board,game)){board.gameOver=true;renderer.draw();setTimeout(()=>{showModal('黑方胜','黑方将杀红方，再接再厉！','😅','再来一局',()=>{hideModal();restartGame();});},300);audio.win();}}board.aiThinking=false;hideThinkingToast();},100);
+        const move=pickAIMove();if(move){const cap2=board.move(move.fr,move.fc,move.tr,move.tc);renderer.draw();if(cap2)audio.capture();else audio.place();updateStatus('红方走棋',SIDE_RED);if(board.inCheck(SIDE_RED))audio.check();if(mode&&mode.isCheckmate(board,game)){board.gameOver=true;renderer.draw();setTimeout(()=>{showModal('黑方胜','黑方将杀红方，再接再厉！','😅','再来一局',()=>{hideModal();restartGame();});},300);audio.win();}}board.aiThinking=false;hideThinkingToast();},100);
       return;
     }
     if(piece&&piece.side===SIDE_RED){game.selected={row,col};game.legalMoves=board.getLegalMoves(row,col);renderer.draw();return;}
     game.selected=null;game.legalMoves=[];renderer.draw();return;
   }
   if(piece&&piece.side===SIDE_RED){game.selected={row,col};game.legalMoves=board.getLegalMoves(row,col);renderer.draw();}
+}
+
+// ============================================================
+// 选择 AI 着法
+//   1) 开局库优先（保持原有行为）
+//   2) 新引擎 AIEngine（定长数组 + make/unmake + Alpha-Beta + 置换表）
+//   3) 兜底：旧 ChessAI
+// ============================================================
+function pickAIMove(){
+  const lvIdx=Math.max(0,parseInt(document.getElementById('difficulty').value)||0);
+  const think=parseInt(document.getElementById('thinkTime').value)*1000;
+  // 1) 开局库
+  if(globalThis.Opening&&Opening.lookup){
+    const op=Opening.lookup(board);
+    if(op&&op.move){
+      const c=board.clone();c.move(op.move.fr,op.move.fc,op.move.tr,op.move.tc);
+      if(!c.isCheckmate()){
+        showToast('📖 开局库：'+(op.name||'定式'),'info');
+        return {fr:op.move.fr,fc:op.move.fc,tr:op.move.tr,tc:op.move.tc};
+      }
+    }
+  }
+  // 2) 新引擎
+  if(globalThis.AIEngine){
+    let prot=null;
+    if(game.currentMode==='heart'){
+      // 心腹局：心腹存活时对方将帅不能被吃，搜索时要屏蔽这类"假吃"
+      prot=new Int8Array(2);
+      const alive=(h,side)=>{if(!h)return 0;const p=board.board[h.row]&&board.board[h.row][h.col];return (p&&p.type===h.type&&p.side===side)?1:0;};
+      prot[0]=alive(game.heartRed,SIDE_RED);
+      prot[1]=alive(game.heartBlack,SIDE_BLACK);
+    }
+    const r=AIEngine.pickMove(board,{level:lvIdx,timeLimit:think*0.8,protectedKing:prot});
+    if(r){
+      if(typeof console!=='undefined')console.log('[AIEngine] 难度='+r.levelName+' 深度='+r.depth+' 节点='+r.nodes+' 用时='+r.ms+'ms 分='+r.score);
+      return {fr:r.fr,fc:r.fc,tr:r.tr,tc:r.tc};
+    }
+  }
+  // 3) 兜底
+  const ai=new ChessAI(board,AI_DEPTH[lvIdx]);
+  return ai.search(think*0.8);
 }
 
 function restartGame(){
@@ -1110,6 +1159,7 @@ if(typeof console!=='undefined'){
   console.log('[AI] 开局面数据库就绪 (Opening.lookup)');
   console.log('[AI] 置换表已就绪 (TT, size='+(typeof TT!=='undefined'?TT.size():'-')+')');
   console.log('[AI] 评估函数增强已注入 (EvalEnhancer)');
+  if(globalThis.AIEngine) console.log('[AI] 新搜索引擎已就绪 (AIEngine) —— 各难度: '+AIEngine.LEVELS.map(l=>l.name+'(d'+l.depth+')').join(' '));
 }
 </script>
 </body>

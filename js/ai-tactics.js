@@ -214,8 +214,9 @@
 
   // 综合评分：返回"红方为正、黑方为负"的对称值
   // 调用约定 —— Tactics.detect(board) 直接加到 evaluate() 总分上即可
-  function detect(board){
-    const side = board.turn;
+  // ⚠ 必须是"纯局面函数"：不能依赖 board.turn，否则同一局面在红/黑走时
+  //   会得到不同分数，评估函数就不再自洽（旧版在这里踩过坑）。
+  function rawFor(board, side){
     let raw = 0;
     raw += scoreTwoRooks(board, side);
     raw += scoreFaceKing(board, side);
@@ -226,7 +227,11 @@
     raw += scoreCannonBattery(board, side);
     raw += scoreTwoGhosts(board, side);
     raw += scoreHollowCannon(board, side);
-    return side === SIDE_RED ? raw : -raw;
+    return raw;
+  }
+
+  function detect(board){
+    return rawFor(board, SIDE_RED) - rawFor(board, SIDE_BLACK);
   }
 
   globalThis.Tactics = { detect, _debug:{scoreTwoRooks,scoreFaceKing,scoreWokao,scoreIronGate,scoreTwoGhosts} };

@@ -116,13 +116,14 @@
   }
 
   // ============ 4. 将军感知 ============
-  // 己方被将军：-50
-  // 对方被将军：+30
+  // ⚠ 同样必须是纯局面函数：只按"谁被将"判分，不能看 board.turn。
+  //   旧版用 board.turn 判定"己方"，导致同一个局面在红走/黑走时得分不同。
+  // 被将军的一方扣 50（红方为正的对称值）
   function checkBonus(board){
     let s = 0;
     try{
-      if(board.inCheck(board.turn)) s -= 50;
-      if(board.inCheck(1-board.turn)) s += 30;
+      if(board.inCheck(SIDE_RED)) s -= 50;
+      if(board.inCheck(SIDE_BLACK)) s += 50;
     } catch(e){}
     return s;
   }
